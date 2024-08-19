@@ -1,0 +1,85 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
+
+def get_data_from_database():
+    # Define database connection parameters
+    db_username = 'root'
+    db_password = 'sql%400883'  # URL-encoded password
+    db_host = 'localhost'
+    db_port = '3306'
+    db_name = 'Netflix'
+
+    # Create a connection string
+    connection_string = f'mysql+mysqlconnector://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}'
+
+    # Create a connection to the database
+    engine = create_engine(connection_string)
+
+    try:
+        connection = engine.connect()
+
+        # Load data into Pandas DataFrames
+        customers = pd.read_sql('SELECT * FROM customer', connection)
+        subscriptions = pd.read_sql('SELECT * FROM subscription', connection)
+        transactions = pd.read_sql('SELECT * FROM transactions', connection)
+        feedback = pd.read_sql('SELECT * FROM feedback', connection)
+
+    except SQLAlchemyError as e:
+        print(f"Error: {e}")
+    finally:
+        # Ensure the connection is closed
+        connection.close()
+
+    # Data cleaning and preprocessing
+    customers['join_date'] = pd.to_datetime(customers['join_date'], errors='coerce')
+    subscriptions['start_date'] = pd.to_datetime(subscriptions['start_date'], errors='coerce')
+    subscriptions['end_date'] = pd.to_datetime(subscriptions['end_date'], errors='coerce')
+    transactions['transaction_date'] = pd.to_datetime(transactions['transaction_date'], errors='coerce')
+    feedback['feedback_date'] = pd.to_datetime(feedback['feedback_date'], errors='coerce')
+
+    # Example of handling missing values
+    feedback['rating'].fillna(feedback['rating'].mean(), inplace=True)
+
+    return customers, subscriptions, transactions, feedback
+
+def visualize_data(customers, subscriptions, transactions, feedback):
+    sns.set(style="whitegrid")
+
+    # Plot the distribution of customer join dates
+    plt.figure(figsize=(10, 6))
+    sns.histplot(customers['join_date'].dropna(), kde=True, bins=30)
+    plt.title('Distribution of Customer Join Dates')
+    plt.xlabel('Join Date')
+    plt.ylabel('Frequency')
+    plt.show()
+
+    # Plot the number of subscriptions over time
+    plt.figure(figsize=(10, 6))
+    subscriptions['start_date'].dropna().groupby(subscriptions['start_date'].dt.to_period('M')).count().plot(kind='bar')
+    plt.title('Number of Subscriptions Over Time')
+    plt.xlabel('Start Date')
+    plt.ylabel('Number of Subscriptions')
+    plt.show()
+
+    # Plot the total transactions per month
+    plt.figure(figsize=(10, 6))
+    transactions['transaction_date'].dropna().groupby(transactions['transaction_date'].dt.to_period('M')).count().plot(kind='bar')
+    plt.title('Total Transactions Per Month')
+    plt.xlabel('Transaction Date')
+    plt.ylabel('Total Transactions')
+    plt.show()
+
+    # Plot the average feedback rating over time
+    plt.figure(figsize=(10, 6))
+    feedback.groupby(feedback['feedback_date'].dt.to_period('M'))['rating'].mean().plot(kind='line', marker='o')
+    plt.title('Average Feedback Rating Over Time')
+    plt.xlabel('Feedback Date')
+    plt.ylabel('Average Rating')
+    plt.show()
+
+# Call the function to execute the process
+customers, subscriptions, transactions, feedback = get_data_from_database()
+visualize_data(customers, subscriptions, transactions, feedback)
